@@ -96,7 +96,11 @@
     </div>
 
     <script>
-        // ⚠️ อย่าลืมเช็คเลข Port ให้ตรงกับที่รัน uvicorn ไว้นะครับ (เช่น 8000 หรือ 8001)
+        // 🌟 ดักทาง: ถ้าไม่มีโทเคน ให้กลับไปหน้าล็อคอิน
+        if (!localStorage.getItem("token")) {
+            window.location.href = "login.html";
+        }
+
         const API_BASE_URL = "http://127.0.0.1:8000/api";
 
         // 📌 1. ฟังก์ชันส่งข้อมูลนักเรียน (เวอร์ชันเปลี่ยนร่างป๊อปอัป)
@@ -110,7 +114,10 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/students`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                    },
                     body: JSON.stringify({ student_id: parseInt(id), name: name })
                 });
                 
@@ -118,6 +125,8 @@
                     Swal.fire('สำเร็จ', `บันทึกนักเรียน ${name} เรียบร้อย`, 'success');
                     document.getElementById('stu_id').value = '';
                     document.getElementById('stu_name').value = '';
+                } else if (res.status === 401) {
+                    handleUnauthorized();
                 } else {
                     Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้ (รหัสอาจซ้ำในระบบ)', 'error');
                 }
@@ -137,7 +146,10 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/courses`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                    },
                     body: JSON.stringify({ course_id: id, course_name: name })
                 });
                 
@@ -145,6 +157,8 @@
                     Swal.fire('สำเร็จ', `บันทึกวิชา ${name} เรียบร้อย`, 'success');
                     document.getElementById('course_id').value = '';
                     document.getElementById('course_name').value = '';
+                } else if (res.status === 401) {
+                    handleUnauthorized();
                 } else {
                     Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้ (รหัสวิชาอาจซ้ำ)', 'error');
                 }
@@ -164,7 +178,10 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/enrollments`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                    },
                     body: JSON.stringify({ student_id: parseInt(stu_id), course_id: course_id })
                 });
                 
@@ -172,6 +189,8 @@
                     Swal.fire('สำเร็จ', `นำรหัสนักเรียน ${stu_id} เข้าวิชา ${course_id} เรียบร้อย`, 'success');
                     document.getElementById('enroll_stu_id').value = '';
                     document.getElementById('enroll_course_id').value = '';
+                } else if (res.status === 401) {
+                    handleUnauthorized();
                 } else {
                     Swal.fire('ข้อผิดพลาด', 'ไม่สามารถลงทะเบียนได้', 'error');
                 }
@@ -180,7 +199,7 @@
             }
         }
 
-        // 🌟 อัปเดตฟังก์ชันอ่านไฟล์ CSV ให้รองรับ คอลัมน์ที่ 3 (ชั้น) และ 4 (ห้อง)
+        // 🌟 อัปเดตฟังก์ชันอ่านไฟล์ CSV
         function uploadStudentCSV() {
             const fileInput = document.getElementById('student_csv');
             if (!fileInput.files.length) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกไฟล์ CSV ก่อน', 'warning');
@@ -199,7 +218,6 @@
                     if (cols.length >= 2) {
                         const stu_id = parseInt(cols[0].trim());
                         const stu_name = cols[1].trim();
-                        // อ่านคอลัมน์ชั้นและห้อง (ถ้าไม่มีให้ใส่ขีด -)
                         const stu_grade = cols[2] ? cols[2].trim() : "-"; 
                         const stu_room = cols[3] ? cols[3].trim() : "-";
                         
@@ -215,20 +233,28 @@
                     Swal.fire({ title: 'กำลังอัปโหลด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     const res = await fetch(`${API_BASE_URL}/students/bulk`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                        },
                         body: JSON.stringify({ students: studentList })
                     });
-                    const data = await res.json();
+                    
                     if(res.ok) {
+                        const data = await res.json();
                         Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: data.message });
                         fileInput.value = ''; 
-                    } else Swal.fire('ข้อผิดพลาด', 'เซิร์ฟเวอร์ตอบกลับผิดพลาด', 'error');
+                    } else if (res.status === 401) {
+                        handleUnauthorized();
+                    } else {
+                        Swal.fire('ข้อผิดพลาด', 'เซิร์ฟเวอร์ตอบกลับผิดพลาด', 'error');
+                    }
                 } catch (err) { Swal.fire('ข้อผิดพลาด', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error'); }
             };
             reader.readAsText(file, 'UTF-8');
         }
 
-        // 📌 ฟังก์ชันใหม่: ลงทะเบียนรายห้อง/รายชั้น
+        // 📌 ฟังก์ชันลงทะเบียนรายห้อง/รายชั้น
         async function enrollByClass() {
             const course_id = document.getElementById('enroll_course_id').value;
             const grade = document.getElementById('enroll_grade').value;
@@ -242,16 +268,22 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/enrollments/by-class`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                    },
                     body: JSON.stringify({ course_id: course_id, grade: grade, room: room })
                 });
                 
-                const data = await res.json();
                 if(res.ok) {
+                    const data = await res.json();
                     Swal.fire('สำเร็จ', data.message, 'success');
                     document.getElementById('enroll_grade').value = '';
                     document.getElementById('enroll_room').value = '';
+                } else if (res.status === 401) {
+                    handleUnauthorized();
                 } else {
+                    const data = await res.json();
                     Swal.fire('ข้อผิดพลาด', data.detail || 'ไม่พบนักเรียนในชั้น/ห้องนี้', 'error');
                 }
             } catch (err) { 
@@ -269,19 +301,32 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/enrollments/all`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                    },
                     body: JSON.stringify({ course_id: course_id })
                 });
                 
-                const data = await res.json();
                 if(res.ok) {
+                    const data = await res.json();
                     Swal.fire('สำเร็จ', data.message, 'success');
+                } else if (res.status === 401) {
+                    handleUnauthorized();
                 } else {
                     Swal.fire('ข้อผิดพลาด', 'ไม่สามารถลงทะเบียนได้', 'error');
                 }
             } catch (err) { 
                 Swal.fire('ข้อผิดพลาด', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error'); 
             }
+        }
+
+        // 🌟 ฟังก์ชันตัวช่วย: จัดการเมื่อ Token หมดอายุ หรือไม่มีสิทธิ์
+        function handleUnauthorized() {
+            Swal.fire('หมดเวลาเชื่อมต่อ', 'กรุณาล็อคอินใหม่อีกครั้ง', 'warning').then(() => {
+                localStorage.removeItem("token");
+                window.location.href = "login.html";
+            });
         }
     </script>
 </body>

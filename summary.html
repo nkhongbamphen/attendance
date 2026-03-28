@@ -46,6 +46,11 @@
     </div>
 
     <script>
+        // 🌟 ดักทาง: ถ้าไม่มีโทเคน (บัตรพนักงาน) ให้เตะกลับไปหน้าล็อคอิน
+        if (!localStorage.getItem("token")) {
+            window.location.href = "login.html";
+        }
+
         const API_BASE_URL = "http://127.0.0.1:8000/api";
         let sessionData = null;
 
@@ -97,7 +102,10 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/attendance`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 เพิ่มบัตรพนักงานตรงนี้ครับ!
+                    },
                     body: JSON.stringify(payload)
                 });
                 
@@ -111,6 +119,12 @@
                     }).then(() => {
                         localStorage.removeItem("attendanceSession"); // ล้างความจำ
                         window.location.href = "index.html"; // เด้งกลับหน้าแรก
+                    });
+                } else if (res.status === 401) {
+                    // 🌟 ถ้าบัตรหมดอายุ หรือปลอมแปลงบัตร
+                    Swal.fire('หมดเวลาเชื่อมต่อ', 'กรุณาล็อคอินใหม่อีกครั้ง', 'warning').then(() => {
+                        localStorage.removeItem("token");
+                        window.location.href = "login.html";
                     });
                 } else {
                     Swal.fire('ข้อผิดพลาด', 'บันทึกข้อมูลไม่สำเร็จ', 'error');

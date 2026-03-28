@@ -64,6 +64,11 @@
     </div>
 
     <script>
+        // 🌟 ดักทาง: ถ้าไม่มีโทเคน ให้กลับไปหน้าล็อคอิน
+        if (!localStorage.getItem("token")) {
+            window.location.href = "login.html";
+        }
+
         const API_BASE_URL = "http://127.0.0.1:8000/api";
 
         async function loadReport() {
@@ -78,10 +83,23 @@
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5"><div class="spinner-border text-primary"></div><br>กำลังประมวลผล...</td></tr>';
 
             try {
-                // เรียก API
-                const response = await fetch(`${API_BASE_URL}/reports/${courseId}`);
+                // 🌟 เพิ่มการแนบ Token (บัตรพนักงาน) ไปกับ Request
+                const response = await fetch(`${API_BASE_URL}/reports/${courseId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    }
+                });
                 
                 if(!response.ok) {
+                    // 🌟 ดักจับกรณี Token หมดอายุ หรือไม่มีสิทธิ์
+                    if (response.status === 401) {
+                        Swal.fire('หมดเวลาเชื่อมต่อ', 'กรุณาล็อคอินใหม่อีกครั้ง', 'warning').then(() => {
+                            localStorage.removeItem("token");
+                            window.location.href = "login.html";
+                        });
+                        return;
+                    }
                     throw new Error('ไม่สามารถติดต่อ API ได้');
                 }
 
