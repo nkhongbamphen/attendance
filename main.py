@@ -15,7 +15,7 @@ SECRET_TOKEN = "teacher-secret-token-999" # บัตรพนักงานจ
 # ==========================================
 # 1. ตั้งค่าฐานข้อมูล (เหมือนเดิม)
 # ==========================================
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:hfJIjDvvbgNgCxma@db.aaqcwczmyybdhkpncgvr.supabase.co:5432/postgres"
+SQLALCHEMY_DATABASE_URL = "postgresql://neondb_owner:npg_cxkt5LpVewy4@ep-billowing-lake-a181ay80-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
