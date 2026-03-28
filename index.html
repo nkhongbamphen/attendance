@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบเช็คชื่อนักเรียน</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        .mobile-app {
+            max-width: 480px; 
+            margin: 0 auto; 
+            background-color: #f4f7f6; 
+            min-height: 100vh;
+            padding-bottom: 90px;
+        }
+        
+        .student-card {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #e9ecef;
+        }
+
+        .btn-group label {
+            font-size: 0.85rem;
+            padding: 8px 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-app shadow-lg position-relative">
+        
+        <div class="bg-primary text-white p-3 rounded-bottom-4 shadow-sm mb-4">
+            <h5 class="mb-1">✅ ระบบเช็คชื่อนักเรียน</h5>
+            <p class="mb-0 opacity-75 small">ดึงข้อมูลจากฐานข้อมูลอัตโนมัติ</p>
+        
+            <a href="register.html" class="btn btn-light btn-sm fw-bold shadow-sm text-primary">
+            📊 จัดการข้อมูลพื้นฐาน
+            </a>
+            <a href="report.html" class="btn btn-light btn-sm fw-bold shadow-sm text-primary">
+            📊 รายงาน
+            </a>
+            
+        </div>
+        <div class="px-3 mb-3">
+            <label class="form-label fw-bold text-dark">🔍 รหัสวิชาที่ต้องการเช็คชื่อ</label>
+            <div class="input-group shadow-sm">
+                <input type="text" id="subject_id" class="form-control" placeholder="เช่น ว31101">
+                <button onclick="fetchStudents()" class="btn btn-primary fw-bold px-4">ดึงรายชื่อ</button>
+            </div>
+            <div class="input-group shadow-sm">
+                <span class="input-group-text bg-white">⏱️ จำนวนคาบ</span>
+                <select id="period_count" class="form-select">
+                    <option value="1" selected>1 คาบ</option>
+                    <option value="2">2 คาบ</option>
+                    <option value="3">3 คาบ</option>
+                    <option value="4">4 คาบ</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="student-list-container" class="px-3">
+            <div class="text-center text-muted mt-5">
+                <p>กรุณาระบุรหัสวิชาแล้วกดปุ่ม "ดึงรายชื่อ"</p>
+            </div>
+        </div>
+
+        <div class="position-fixed bottom-0 p-3 bg-white border-top shadow-lg" style="max-width: 480px; width: 100%; z-index: 10;">
+            <button onclick="saveAttendance()" class="btn btn-success w-100 py-3 rounded-pill shadow fs-5 fw-bold">
+                💾 ถัดไป -> สรุปการเช็คชื่อ
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000/api";
+        let studentList = [];
+        let currentSubject = "";
+
+        // 📌 ฟังก์ชันวิ่งไปขอดูรายชื่อเด็กจากฐานข้อมูล
+        async function fetchStudents() {
+            const subjectInput = document.getElementById('subject_id').value.trim();
+            if (!subjectInput) return Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัสวิชาก่อนครับ', 'warning');
+
+            Swal.fire({ title: 'กำลังดึงข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                // วิ่งไปเรียก API เส้นที่เราสร้างไว้ใน main.py สเต็ปที่ 1
+                const res = await fetch(`${API_BASE_URL}/courses/${subjectInput}/students`);
+                
+                if (res.ok) {
+                    const students = await res.json();
+                    
+                    if (students.length === 0) {
+                        Swal.fire('ไม่พบข้อมูล', 'ไม่มีนักเรียนลงทะเบียนในวิชานี้ หรือรหัสวิชาผิดครับ', 'info');
+                        return;
+                    }
+                    
+                    // เก็บข้อมูลเข้าตะกร้าแล้วสั่งแสดงผล
+                    studentList = students;
+                    currentSubject = subjectInput;
+                    renderStudents();
+                    Swal.close();
+                } else {
+                    Swal.fire('ข้อผิดพลาด', 'ไม่สามารถดึงข้อมูลได้', 'error');
+                }
+            } catch (err) {
+                Swal.fire('ข้อผิดพลาด', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (อย่าลืมรัน main.py นะครับ)', 'error');
+            }
+        }
+
+        // 📌 ฟังก์ชันสร้างการ์ดรายชื่อ
+        function renderStudents() {
+            const container = document.getElementById('student-list-container');
+            container.innerHTML = `<h6 class="fw-bold text-success mb-3 mt-4">📋 พบนักเรียนทั้งหมด ${studentList.length} คน</h6>`;
+
+            studentList.forEach(student => {
+                const sId = student.student_id;
+                const sName = student.name;
+                
+                const cardHTML = `
+                    <div class="student-card">
+                        <div class="fw-bold mb-2 text-dark">รหัส ${sId} : ${sName}</div>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="status_${sId}" id="present_${sId}" value="present" checked>
+                            <label class="btn btn-outline-success" for="present_${sId}">มา</label>
+
+                            <input type="radio" class="btn-check" name="status_${sId}" id="absent_${sId}" value="absent">
+                            <label class="btn btn-outline-danger" for="absent_${sId}">ขาด</label>
+
+                            <input type="radio" class="btn-check" name="status_${sId}" id="late_${sId}" value="late">
+                            <label class="btn btn-outline-warning" for="late_${sId}">สาย</label>
+
+                            <input type="radio" class="btn-check" name="status_${sId}" id="leave_${sId}" value="leave">
+                            <label class="btn btn-outline-info" for="leave_${sId}">ลา</label>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHTML);
+            });
+        }
+
+        // 📌 ฟังก์ชันเก็บข้อมูลสถานะ แล้วส่งไปหน้า summary.html
+        function saveAttendance() {
+            if (studentList.length === 0) {
+                return Swal.fire('แจ้งเตือน', 'กรุณาดึงรายชื่อนักเรียนก่อนกดถัดไปครับ', 'warning');
+            }
+
+            const studentDataToSave = [];
+
+            studentList.forEach(student => {
+                const radios = document.getElementsByName(`status_${student.student_id}`);
+                let selectedValue = "present"; // ค่าเริ่มต้นคือมาเรียน
+                
+                for(let i = 0; i < radios.length; i++) {
+                    if(radios[i].checked) {
+                        selectedValue = radios[i].value;
+                        break;
+                    }
+                }
+                
+                // แพ็คใส่กล่องเตรียมส่งไปหน้าสรุป
+                studentDataToSave.push({
+                    student_id: student.student_id,
+                    student_name: student.name,
+                    status: selectedValue
+                });
+            });
+
+            const attendanceData = {
+                subject_id: currentSubject,
+                date: new Date().toISOString().split('T')[0], 
+                periods: parseInt(document.getElementById('period_count').value), // 🌟 ดึงจำนวนคาบไปด้วย
+                students: studentDataToSave
+            };
+
+            // ฝากข้อมูลไว้ในเครื่อง (localStorage) แล้ววาร์ปไปหน้า summary
+            localStorage.setItem("attendanceSession", JSON.stringify(attendanceData));
+            window.location.href = "summary.html";
+        }
+    </script>
+</body>
+</html>

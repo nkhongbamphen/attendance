@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รายงานการเข้าเรียน</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Sarabun', sans-serif; }
+        .container { max-width: 900px; margin-top: 30px; }
+        .table-container { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+        .danger-row { background-color: #fff5f5 !important; color: #dc3545; }
+        .badge-danger { background-color: #dc3545; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; }
+        .badge-success { background-color: #198754; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; }
+        .status-cell { font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="fw-bold text-primary mb-0">📊 รายงานเปอร์เซ็นต์การเข้าเรียน</h2>
+                <p class="text-muted">เกณฑ์ผ่าน: ต้องเข้าเรียนไม่น้อยกว่า 80%</p>
+            </div>
+            <a href="index.html" class="btn btn-outline-secondary">กลับหน้าหลัก</a>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <label class="form-label fw-bold">ระบุรหัสวิชาเพื่อดูรายงาน</label>
+                <div class="input-group">
+                    <input type="text" id="course_id" class="form-control form-control-lg" placeholder="ตัวอย่าง: ว31101">
+                    <button onclick="loadReport()" class="btn btn-primary px-5 fw-bold">ดึงข้อมูล</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div id="course_summary" class="alert alert-info d-none mb-4"></div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>รหัสนักเรียน</th>
+                            <th>ชื่อ-นามสกุล</th>
+                            <th class="text-center">มา / ทั้งหมด</th>
+                            <th class="text-center">คิดเป็น</th>
+                            <th class="text-center">สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report_table_body">
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                กรุณากรอกรหัสวิชาแล้วกดปุ่ม "ดึงข้อมูล"
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000/api";
+
+        async function loadReport() {
+            const courseId = document.getElementById('course_id').value.trim();
+            if(!courseId) {
+                return Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัสวิชาก่อนครับ', 'warning');
+            }
+
+            const tbody = document.getElementById('report_table_body');
+            const summaryDiv = document.getElementById('course_summary');
+            
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5"><div class="spinner-border text-primary"></div><br>กำลังประมวลผล...</td></tr>';
+
+            try {
+                // เรียก API
+                const response = await fetch(`${API_BASE_URL}/reports/${courseId}`);
+                
+                if(!response.ok) {
+                    throw new Error('ไม่สามารถติดต่อ API ได้');
+                }
+
+                const data = await response.json();
+                console.log("Data received:", data); // ดูข้อมูลใน Console (กด F12)
+
+                if(!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-danger">❌ ไม่พบข้อมูลการเช็คชื่อหรือการลงทะเบียนในวิชานี้</td></tr>';
+                    summaryDiv.classList.add('d-none');
+                    return;
+                }
+
+                // แสดงสรุปหัวตาราง
+                summaryDiv.innerHTML = `<strong>วิชา:</strong> ${courseId} | <strong>เช็คชื่อไปแล้วทั้งหมด:</strong> ${data[0].total_days} คาบ`;
+                summaryDiv.classList.remove('d-none');
+
+                // วาดตาราง
+                tbody.innerHTML = '';
+                data.forEach(item => {
+                    const isDanger = item.is_danger;
+                    const statusBadge = isDanger 
+                        ? '<span class="badge-danger">⚠️ ต่ำกว่า 80%</span>' 
+                        : '<span class="badge-success">✅ ผ่านเกณฑ์</span>';
+                    
+                    const row = `
+                        <tr class="${isDanger ? 'table-danger' : ''}">
+                            <td class="fw-bold">${item.student_id}</td>
+                            <td>${item.name}</td>
+                            <td class="text-center">${item.attended_days} / ${item.total_days}</td>
+                            <td class="text-center fw-bold ${isDanger ? 'text-danger' : 'text-success'}">
+                                ${item.percent}%
+                            </td>
+                            <td class="text-center">${statusBadge}</td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+
+            } catch (error) {
+                console.error("Error:", error);
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-danger">เกิดข้อผิดพลาด: ${error.message}</td></tr>`;
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

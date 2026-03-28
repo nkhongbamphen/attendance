@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สรุปการเช็คชื่อ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .mobile-app {
+            max-width: 480px; 
+            margin: 0 auto; 
+            background-color: #f4f7f6; 
+            min-height: 100vh;
+        }
+        .summary-box {
+            border-radius: 12px;
+            padding: 20px;
+            color: white;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-app shadow-lg p-3">
+        <div class="text-center mb-4 mt-3">
+            <h4 class="fw-bold">📊 สรุปการเช็คชื่อ</h4>
+            <p class="text-muted" id="course_info">วิชา: - | วันที่: -</p>
+        </div>
+
+        <div class="row g-2 mb-4">
+            <div class="col-6"><div class="summary-box bg-success shadow-sm"><h2 id="count_present">0</h2><small>มาเรียน</small></div></div>
+            <div class="col-6"><div class="summary-box bg-danger shadow-sm"><h2 id="count_absent">0</h2><small>ขาดเรียน</small></div></div>
+            <div class="col-6"><div class="summary-box bg-warning text-dark shadow-sm"><h2 id="count_late">0</h2><small>สาย</small></div></div>
+            <div class="col-6"><div class="summary-box bg-info shadow-sm"><h2 id="count_leave">0</h2><small>ลา</small></div></div>
+        </div>
+
+        <button onclick="submitToDatabase()" class="btn btn-primary w-100 py-3 rounded-pill shadow fs-5 fw-bold mb-3">
+            💾 ยืนยันบันทึกเข้าฐานข้อมูล
+        </button>
+        <button onclick="goBack()" class="btn btn-outline-secondary w-100 py-2 rounded-pill fw-bold">
+            ⬅️ กลับไปแก้ไข
+        </button>
+    </div>
+
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000/api";
+        let sessionData = null;
+
+        // 📌 1. ดึงข้อมูลที่ฝากไว้ตอนมาจากหน้า index.html
+        window.onload = function() {
+            const dataStr = localStorage.getItem("attendanceSession");
+            if (!dataStr) {
+                Swal.fire('ไม่พบข้อมูล', 'กรุณาทำการเช็คชื่อจากหน้าแรกก่อนครับ', 'error').then(() => {
+                    window.location.href = "index.html";
+                });
+                return;
+            }
+
+            sessionData = JSON.parse(dataStr);
+            document.getElementById('course_info').innerText = `วิชา: ${sessionData.subject_id} | วันที่: ${sessionData.date} | จำนวน: ${sessionData.periods} คาบ`;
+
+            // นับยอดสรุป
+            let present = 0, absent = 0, late = 0, leave = 0;
+            sessionData.students.forEach(s => {
+                if (s.status === 'present') present++;
+                else if (s.status === 'absent') absent++;
+                else if (s.status === 'late') late++;
+                else if (s.status === 'leave') leave++;
+            });
+
+            document.getElementById('count_present').innerText = present;
+            document.getElementById('count_absent').innerText = absent;
+            document.getElementById('count_late').innerText = late;
+            document.getElementById('count_leave').innerText = leave;
+        };
+
+        // 📌 2. ส่งข้อมูลเข้า Database จริงๆ
+        async function submitToDatabase() {
+            if (!sessionData) return;
+
+            Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            // เตรียมข้อมูลให้ตรงกับที่ API ต้องการ
+            const payload = {
+                course_id: sessionData.subject_id,
+                date: sessionData.date,
+                periods: sessionData.periods, // 🌟 ส่งจำนวนคาบไปให้ฐานข้อมูล
+                students: sessionData.students.map(s => ({
+                    student_id: s.student_id,
+                    status: s.status
+                }))
+            };
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/attendance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'บันทึกสำเร็จ!',
+                        text: result.message,
+                        confirmButtonText: 'กลับหน้าแรก'
+                    }).then(() => {
+                        localStorage.removeItem("attendanceSession"); // ล้างความจำ
+                        window.location.href = "index.html"; // เด้งกลับหน้าแรก
+                    });
+                } else {
+                    Swal.fire('ข้อผิดพลาด', 'บันทึกข้อมูลไม่สำเร็จ', 'error');
+                }
+            } catch (err) {
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+            }
+        }
+
+        function goBack() {
+            window.location.href = "index.html";
+        }
+    </script>
+</body>
+</html>
