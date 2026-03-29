@@ -117,6 +117,8 @@
         }
 
         function renderHistory(dates, summary) {
+            // 🌟 เพิ่มบรรทัดนี้เข้าไป: สั่งให้เรียงวันที่จากน้อยไปมาก (ซ้ายไปขวา)
+            dates.sort();
             const thead = document.getElementById('history_header');
             let headerHtml = `<tr><th class="text-start">ชื่อ-นามสกุล</th>`;
             dates.forEach(d => {
