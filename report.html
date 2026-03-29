@@ -6,143 +6,158 @@
     <title>รายงานการเข้าเรียน</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
     <style>
         body { background-color: #f8f9fa; font-family: 'Sarabun', sans-serif; }
-        .container { max-width: 900px; margin-top: 30px; }
-        .table-container { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
-        .danger-row { background-color: #fff5f5 !important; color: #dc3545; }
-        .badge-danger { background-color: #dc3545; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; }
-        .badge-success { background-color: #198754; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; }
-        .status-cell { font-weight: bold; }
+        .card { border-radius: 15px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .table-responsive { border-radius: 10px; }
+        .status-present { color: #198754; font-weight: bold; } /* มา */
+        .status-absent { color: #dc3545; font-weight: bold; }  /* ขาด */
+        .status-late { color: #fd7e14; font-weight: bold; }    /* สาย */
+        .status-leave { color: #0dcaf0; font-weight: bold; }   /* ลา */
     </style>
 </head>
 <body>
-
-    <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h2 class="fw-bold text-primary mb-0">📊 รายงานเปอร์เซ็นต์การเข้าเรียน</h2>
-                <p class="text-muted">เกณฑ์ผ่าน: ต้องเข้าเรียนไม่น้อยกว่า 80%</p>
-            </div>
-            <a href="index.html" class="btn btn-outline-secondary">กลับหน้าหลัก</a>
+    <div class="container py-4" style="max-width: 800px;">
+        <div class="d-flex align-items-center mb-4">
+            <a href="index.html" class="btn btn-outline-secondary me-3">⬅️</a>
+            <h3 class="mb-0 fw-bold">📊 รายงานการเข้าเรียน</h3>
         </div>
 
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <label class="form-label fw-bold">ระบุรหัสวิชาเพื่อดูรายงาน</label>
-                <div class="input-group">
-                    <input type="text" id="course_id" class="form-control form-control-lg" placeholder="ตัวอย่าง: ว31101">
-                    <button onclick="loadReport()" class="btn btn-primary px-5 fw-bold">ดึงข้อมูล</button>
+        <div class="card p-3 mb-4">
+            <div class="row g-2">
+                <div class="col-8">
+                    <input type="text" id="course_id" class="form-control" placeholder="ใส่รหัสวิชา เช่น ว31101">
+                </div>
+                <div class="col-4">
+                    <button onclick="getReport()" class="btn btn-primary w-100">ดูรายงาน</button>
                 </div>
             </div>
         </div>
 
-        <div class="table-container">
-            <div id="course_summary" class="alert alert-info d-none mb-4"></div>
+        <div id="report_content" style="display: none;">
             
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>รหัสนักเรียน</th>
-                            <th>ชื่อ-นามสกุล</th>
-                            <th class="text-center">มา / ทั้งหมด</th>
-                            <th class="text-center">คิดเป็น</th>
-                            <th class="text-center">สถานะ</th>
-                        </tr>
-                    </thead>
-                    <tbody id="report_table_body">
-                        <tr>
-                            <td colspan="5" class="text-center py-5 text-muted">
-                                กรุณากรอกรหัสวิชาแล้วกดปุ่ม "ดึงข้อมูล"
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="d-flex justify-content-end mb-3">
+                <button onclick="exportToExcel()" class="btn btn-success fw-bold shadow-sm">
+                    📥 ดาวน์โหลด Excel
+                </button>
+            </div>
+
+            <div class="card p-3 mb-4">
+                <h5 class="fw-bold mb-3">📋 สรุปเปอร์เซ็นต์เข้าเรียน</h5>
+                <div class="table-responsive">
+                    <table id="table_summary" class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ชื่อ-นามสกุล</th>
+                                <th class="text-center">เข้าเรียน (%)</th>
+                                <th class="text-center">ผลลัพธ์</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summary_table"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card p-3">
+                <h5 class="fw-bold mb-3">📅 ประวัติการเช็คชื่อรายวัน</h5>
+                <div class="table-responsive">
+                    <table id="table_history" class="table table-bordered table-sm text-center" style="font-size: 0.85rem;">
+                        <thead id="history_header" class="table-light"></thead>
+                        <tbody id="history_body"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        // 🌟 ดักทาง: ถ้าไม่มีโทเคน ให้กลับไปหน้าล็อคอิน
-        if (!localStorage.getItem("token")) {
-            window.location.href = "login.html";
-        }
+        const API_BASE_URL = "https://attendance-iudd.onrender.com/api"; 
 
-        const API_BASE_URL = "https://attendance-iudd.onrender.com/api";
-
-        async function loadReport() {
+        async function getReport() {
             const courseId = document.getElementById('course_id').value.trim();
-            if(!courseId) {
-                return Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัสวิชาก่อนครับ', 'warning');
-            }
+            if (!courseId) return Swal.fire('ระบุรหัสวิชา', '', 'warning');
 
-            const tbody = document.getElementById('report_table_body');
-            const summaryDiv = document.getElementById('course_summary');
-            
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5"><div class="spinner-border text-primary"></div><br>กำลังประมวลผล...</td></tr>';
+            Swal.fire({ title: 'กำลังโหลดข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
-                // 🌟 เพิ่มการแนบ Token (บัตรพนักงาน) ไปกับ Request
                 const response = await fetch(`${API_BASE_URL}/reports/${courseId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('token')
-                    }
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
                 });
-                
-                if(!response.ok) {
-                    // 🌟 ดักจับกรณี Token หมดอายุ หรือไม่มีสิทธิ์
-                    if (response.status === 401) {
-                        Swal.fire('หมดเวลาเชื่อมต่อ', 'กรุณาล็อคอินใหม่อีกครั้ง', 'warning').then(() => {
-                            localStorage.removeItem("token");
-                            window.location.href = "login.html";
-                        });
-                        return;
-                    }
-                    throw new Error('ไม่สามารถติดต่อ API ได้');
-                }
-
                 const data = await response.json();
-                console.log("Data received:", data); // ดูข้อมูลใน Console (กด F12)
 
-                if(!data || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-danger">❌ ไม่พบข้อมูลการเช็คชื่อหรือการลงทะเบียนในวิชานี้</td></tr>';
-                    summaryDiv.classList.add('d-none');
-                    return;
+                if (!data.summary || data.summary.length === 0) {
+                    return Swal.fire('ไม่พบข้อมูล', 'วิชานี้ยังไม่มีการเช็คชื่อหรือยังไม่มีนักเรียน', 'info');
                 }
 
-                // แสดงสรุปหัวตาราง
-                summaryDiv.innerHTML = `<strong>วิชา:</strong> ${courseId} | <strong>เช็คชื่อไปแล้วทั้งหมด:</strong> ${data[0].total_days} คาบ`;
-                summaryDiv.classList.remove('d-none');
+                document.getElementById('report_content').style.display = 'block';
+                renderSummary(data.summary);
+                renderHistory(data.dates, data.summary);
+                
+                Swal.close();
 
-                // วาดตาราง
-                tbody.innerHTML = '';
-                data.forEach(item => {
-                    const isDanger = item.is_danger;
-                    const statusBadge = isDanger 
-                        ? '<span class="badge-danger">⚠️ ต่ำกว่า 80%</span>' 
-                        : '<span class="badge-success">✅ ผ่านเกณฑ์</span>';
-                    
-                    const row = `
-                        <tr class="${isDanger ? 'table-danger' : ''}">
-                            <td class="fw-bold">${item.student_id}</td>
-                            <td>${item.name}</td>
-                            <td class="text-center">${item.attended_days} / ${item.total_days}</td>
-                            <td class="text-center fw-bold ${isDanger ? 'text-danger' : 'text-success'}">
-                                ${item.percent}%
-                            </td>
-                            <td class="text-center">${statusBadge}</td>
-                        </tr>
-                    `;
-                    tbody.insertAdjacentHTML('beforeend', row);
-                });
-
-            } catch (error) {
-                console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-5 text-danger">เกิดข้อผิดพลาด: ${error.message}</td></tr>`;
-                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้', 'error');
+            } catch (e) {
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถดึงข้อมูลได้', 'error');
             }
+        }
+
+        function renderSummary(summary) {
+            const tbody = document.getElementById('summary_table');
+            tbody.innerHTML = summary.map(s => `
+                <tr>
+                    <td>${s.name}</td>
+                    <td class="text-center">${s.percent}%</td>
+                    <td class="text-center">
+                        <span class="badge ${s.status_text === 'ผ่าน' ? 'bg-success' : 'bg-danger'}">${s.status_text}</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderHistory(dates, summary) {
+            const thead = document.getElementById('history_header');
+            let headerHtml = `<tr><th class="text-start">ชื่อ-นามสกุล</th>`;
+            dates.forEach(d => {
+                const shortDate = d.split('-').slice(1).reverse().join('/');
+                headerHtml += `<th>${shortDate}</th>`;
+            });
+            headerHtml += `</tr>`;
+            thead.innerHTML = headerHtml;
+
+            const tbody = document.getElementById('history_body');
+            const statusMap = { 'present': '✅', 'absent': '❌', 'late': 'สาย', 'leave': 'ลา' };
+            const statusClass = { 'present': 'status-present', 'absent': 'status-absent', 'late': 'status-late', 'leave': 'status-leave' };
+
+            tbody.innerHTML = summary.map(s => `
+                <tr>
+                    <td class="text-start">${s.name}</td>
+                    ${dates.map(d => {
+                        const st = s.history[d] || '-';
+                        return `<td class="${statusClass[st] || ''}">${statusMap[st] || '-'}</td>`;
+                    }).join('')}
+                </tr>
+            `).join('');
+        }
+
+        // 🌟 5. ฟังก์ชันสำหรับดึงข้อมูลลงไฟล์ Excel
+        function exportToExcel() {
+            const courseId = document.getElementById('course_id').value.trim();
+            
+            // สร้างไฟล์ Excel (Workbook) จำลองขึ้นมา
+            const wb = XLSX.utils.book_new();
+            
+            // ดึงข้อมูลจากตารางบนหน้าเว็บมาใส่เป็น Sheet ที่ 1 (สรุป)
+            const wsSummary = XLSX.utils.table_to_sheet(document.getElementById('table_summary'));
+            XLSX.utils.book_append_sheet(wb, wsSummary, "สรุปเปอร์เซ็นต์");
+            
+            // ดึงข้อมูลจากตารางบนหน้าเว็บมาใส่เป็น Sheet ที่ 2 (ประวัติรายวัน)
+            const wsHistory = XLSX.utils.table_to_sheet(document.getElementById('table_history'));
+            XLSX.utils.book_append_sheet(wb, wsHistory, "ประวัติการเข้าเรียน");
+            
+            // สั่งดาวน์โหลดลงเครื่อง
+            XLSX.writeFile(wb, `รายงานเช็คชื่อ_${courseId}.xlsx`);
         }
     </script>
 </body>

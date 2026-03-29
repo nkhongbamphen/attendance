@@ -161,16 +161,40 @@ def save_attendance(payload: BulkAttendance, db: Session = Depends(get_db)):
 
 @app.get("/api/reports/{course_id}", dependencies=[Depends(verify_auth)])
 def get_attendance_report(course_id: str, db: Session = Depends(get_db)):
+    # 1. หาวันที่ทั้งหมดที่มีการเช็คชื่อในวิชานี้ (เรียงจากใหม่ไปเก่า)
+    distinct_dates = db.query(AttendanceDB.date).filter(AttendanceDB.subject_id == course_id).distinct().order_by(AttendanceDB.date.desc()).all()
+    all_dates = [d.date for d in distinct_dates]
+
+    # 2. หาจำนวนคาบทั้งหมด (เพื่อคำนวณ %)
     dates_periods = db.query(AttendanceDB.date, AttendanceDB.periods).filter(AttendanceDB.subject_id == course_id).distinct().all()
     total_periods = sum([dp.periods for dp in dates_periods])
+
     enrolls = db.query(EnrollmentDB).filter(EnrollmentDB.course_id == course_id).all()
-    if not enrolls: return []
+    if not enrolls: return {"summary": [], "dates": all_dates}
+    
     students = db.query(StudentDB).filter(StudentDB.student_id.in_([e.student_id for e in enrolls])).all()
-    report = []
+    
+    report_summary = []
     for s in students:
         student_records = db.query(AttendanceDB).filter(AttendanceDB.subject_id == course_id, AttendanceDB.student_id == s.student_id).all()
+        
+        # สร้าง Mapping วันที่ -> สถานะ เพื่อให้หน้าบ้านดึงข้อมูลง่ายๆ
+        history = {r.date: r.status for r in student_records}
+        
         attended_periods = sum([r.periods for r in student_records if r.status in ['present', 'late']])
         percent = (attended_periods / total_periods * 100) if total_periods > 0 else 0
-        report.append({"student_id": s.student_id, "name": s.name, "total_days": total_periods, "attended_days": attended_periods, "percent": round(percent, 2), "is_danger": percent < 80})
-    report.sort(key=lambda x: x['student_id'])
-    return report
+        
+        report_summary.append({
+            "student_id": s.student_id,
+            "name": s.name,
+            "percent": round(percent, 2),
+            "status_text": "ผ่าน" if percent >= 80 else "มส.",
+            "history": history # ส่งประวัติวันต่อวันไปด้วย
+        })
+
+    return {
+        "course_id": course_id,
+        "total_periods": total_periods,
+        "dates": all_dates,
+        "summary": report_summary
+    }
