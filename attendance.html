@@ -95,6 +95,15 @@
                     <label class="form-label fw-bold small text-muted">วันที่เช็คชื่อ</label>
                     <input type="date" id="attendance_date" class="form-control form-control-lg bg-light">
                 </div>
+                <div class="mb-4">
+                    <label class="form-label fw-bold small text-muted">จำนวนคาบเรียน</label>
+                    <select id="attendance_periods" class="form-select form-select-lg bg-light">
+                        <option value="1" selected>1 คาบ</option>
+                        <option value="2">2 คาบ</option>
+                        <option value="3">3 คาบ</option>
+                        <option value="4">4 คาบ</option>
+                    </select>
+                </div>
                 <button onclick="loadStudents()" class="btn btn-primary w-100 py-2 fw-bold rounded-3">
                     🔍 ดึงรายชื่อนักเรียน
                 </button>
@@ -197,6 +206,9 @@
             const courseId = document.getElementById('course_id').value.trim();
             const date = document.getElementById('attendance_date').value;
             
+            // 🌟 1. ดึงข้อมูลว่าครูเลือกกี่คาบ
+            const periods = parseInt(document.getElementById('attendance_periods').value);
+
             // รวบรวมข้อมูลสถานะของเด็กทุกคน
             const attendanceData = currentStudents.map(student => {
                 const status = document.querySelector(`input[name="status_${student.student_id}"]:checked`).value;
@@ -209,6 +221,7 @@
             const payload = {
                 course_id: courseId,
                 date: date,
+                periods: periods, // 🌟 2. ส่งจำนวนคาบไปให้หลังบ้าน
                 students: attendanceData
             };
 
