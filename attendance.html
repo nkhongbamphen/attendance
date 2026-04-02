@@ -201,65 +201,39 @@
             }
         }
 
-        // 🌟 3. ฟังก์ชันบันทึกการเช็คชื่อ
-        async function saveAttendance() {
+        // 🌟 3. ฟังก์ชันบันทึกการเช็คชื่อ (เปลี่ยนให้ส่งไปหน้า Summary แทน)
+        function saveAttendance() {
             const courseId = document.getElementById('course_id').value.trim();
             const date = document.getElementById('attendance_date').value;
-            
-            // 🌟 1. ดึงข้อมูลว่าครูเลือกกี่คาบ
             const periods = parseInt(document.getElementById('attendance_periods').value);
 
             // รวบรวมข้อมูลสถานะของเด็กทุกคน
             const attendanceData = currentStudents.map(student => {
                 const status = document.querySelector(`input[name="status_${student.student_id}"]:checked`).value;
+                
+                // 🌟 1. ดึงชื่อ-นามสกุลมาด้วย (ถ้า Database คุณครูใช้ชื่อคอลัมน์ว่า name อย่างเดียว ให้เปลี่ยนเป็น student.name นะครับ)
+                const fullName = student.first_name ? `${student.first_name} ${student.last_name}` : (student.name || "ไม่ระบุชื่อ");
+
                 return {
                     student_id: student.student_id,
+                    name: fullName,  // 🌟 2. แพ็คชื่อใส่กระเป๋าไปด้วย
                     status: status
                 };
             });
 
-            const payload = {
-                course_id: courseId,
+            // 🌟 เตรียมข้อมูลแพ็กเกจ เพื่อส่งให้หน้า summary.html (สังเกตว่าใช้ชื่อ subject_id ตามที่หน้าสรุปต้องการ)
+            const sessionData = {
+                subject_id: courseId,
                 date: date,
-                periods: periods, // 🌟 2. ส่งจำนวนคาบไปให้หลังบ้าน
+                periods: periods, 
                 students: attendanceData
             };
 
-            Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            // 🌟 ฝากข้อมูลไว้ใน localStorage ชื่อ "attendanceSession"
+            localStorage.setItem("attendanceSession", JSON.stringify(sessionData));
 
-            try {
-                // ⚠️ ต้องเช็คว่า API หลังบ้านคุณครูใช้ URL ไหนในการเซฟ (สมมติเป็น /attendance)
-                const response = await fetch(`${API_BASE_URL}/attendance`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('token')
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                if (response.status === 401) {
-                    return Swal.fire('หมดเวลา', 'กรุณาล็อคอินใหม่', 'warning').then(() => {
-                        localStorage.removeItem("token"); window.location.href = "login.html";
-                    });
-                }
-
-                if (!response.ok) throw new Error('บันทึกไม่สำเร็จ');
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'บันทึกสำเร็จ!',
-                    text: `เช็คชื่อวิชา ${courseId} เรียบร้อยแล้ว`,
-                    timer: 2000,
-                    showConfirmButton: false
-                }).then(() => {
-                    // กลับไปหน้าหลัก หรือเคลียร์หน้าจอ
-                    window.location.href = "index.html"; 
-                });
-
-            } catch (error) {
-                Swal.fire('ข้อผิดพลาด', error.message, 'error');
-            }
+            // 🌟 เด้งไปหน้าสรุปเลย!
+            window.location.href = "summary.html";
         }
     </script>
 </body>

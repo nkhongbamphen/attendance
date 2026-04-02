@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI สแกนใบหน้า</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Sarabun', sans-serif; padding-top: 20px;}
+        .video-container { position: relative; width: 640px; height: 480px; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin: 0 auto; }
+        video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+        canvas { position: absolute; top: 0; left: 0; }
+        #status { font-weight: bold; font-size: 1.2rem; text-align: center; margin-bottom: 15px; }
+        .scanned-list { max-width: 640px; margin: 20px auto; padding: 15px; background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="status" class="text-primary">⏳ 1/2 กำลังโหลดสมอง AI...</div>
+
+        <div class="video-container">
+            <video id="video" autoplay muted playsinline></video>
+        </div>
+
+        <div class="scanned-list text-center">
+            <h5 class="fw-bold">✅ รายชื่อที่สแกนผ่านแล้ว:</h5>
+            <h4 id="scanned_result" class="text-success my-3">- ยังไม่มีผู้สแกน -</h4>
+            
+            <div class="row g-2 justify-content-center mt-3">
+                <div class="col-auto">
+                    <input type="text" id="course_id" class="form-control" placeholder="รหัสวิชา (เช่น ว31101)">
+                </div>
+                <div class="col-auto">
+                    <input type="date" id="attendance_date" class="form-control">
+                </div>
+                <div class="col-auto">
+                    <select id="period_count" class="form-select">
+                        <option value="1">1 คาบ</option>
+                        <option value="2">2 คาบ</option>
+                        <option value="3">3 คาบ</option>
+                        <option value="4">4 คาบ</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button onclick="saveAttendance()" class="btn btn-primary fw-bold">💾 บันทึกเข้าระบบ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const statusText = document.getElementById('status');
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        const API_BASE_URL = "https://attendance-iudd.onrender.com/api"; // ลิงก์ Render ของคุณครู
+
+        // 🌟 ตั้งชื่อไฟล์รูปให้ตรงกับ "รหัสนักเรียน" ของเด็กจริงๆ (เช่น '101', '102')
+        const studentLabels = ['11101', '11102']; 
+        
+        let faceMatcher;
+        let scannedStudents = new Set(); // 🌟 ตะกร้าเก็บรหัสเด็ก (ใช้ Set เพื่อไม่ให้เก็บรหัสซ้ำ)
+
+        // เซ็ตวันที่ปัจจุบันให้อัตโนมัติ
+        document.getElementById('attendance_date').valueAsDate = new Date();
+
+        Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]).then(startTraining);
+
+        async function startTraining() {
+            statusText.textContent = "🧠 กำลังเรียนรู้ใบหน้านักเรียน...";
+            statusText.className = "text-warning";
+
+            const labeledFaceDescriptors = await Promise.all(
+                studentLabels.map(async label => {
+                    const imgUrl = `images/${label}.jpg`;
+                    try {
+                        const img = await faceapi.fetchImage(imgUrl);
+                        const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                        if (detections) return new faceapi.LabeledFaceDescriptors(label, [detections.descriptor]);
+                    } catch (e) {
+                        console.error(`ไม่พบรูปภาพ ${label}.jpg`);
+                    }
+                    return null;
+                })
+            );
+
+            const validDescriptors = labeledFaceDescriptors.filter(d => d !== null);
+            if(validDescriptors.length > 0) {
+                faceMatcher = new faceapi.FaceMatcher(validDescriptors, 0.55);
+                startVideo();
+            } else {
+                statusText.textContent = "❌ ไม่พบรูปภาพนักเรียนในโฟลเดอร์ images";
+                statusText.className = "text-danger";
+            }
+        }
+
+        function startVideo() {
+            statusText.textContent = "📷 กำลังเปิดกล้อง...";
+            navigator.mediaDevices.getUserMedia({ video: {} })
+                .then(stream => {
+                    video.srcObject = stream;
+                    statusText.textContent = "✅ สแกนใบหน้าได้เลย!";
+                    statusText.className = "text-success";
+                })
+                .catch(err => console.error(err));
+        }
+
+        video.addEventListener('play', () => {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.querySelector('.video-container').append(canvas);
+            const displaySize = { width: video.width || 640, height: video.height || 480 };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+
+                const results = resizedDetections.map(d => faceMatcher.findBestMatch(d.descriptor));
+
+                results.forEach((result, i) => {
+                    const box = resizedDetections[i].detection.box;
+                    const isUnknown = result.label === 'unknown';
+                    
+                    const drawBox = new faceapi.draw.DrawBox(box, { 
+                        label: isUnknown ? "ไม่รู้จัก" : `รหัส: ${result.label}`,
+                        boxColor: isUnknown ? 'red' : 'green' 
+                    });
+                    drawBox.draw(canvas);
+
+                    // 🌟 ถ้าเจอหน้านักเรียน (ไม่ใช่ unknown) ให้เอาลงตะกร้า
+                    if (!isUnknown) {
+                        scannedStudents.add(result.label);
+                        updateScannedList();
+                    }
+                });
+            }, 300); // ปรับเป็น 0.3 วิ เพื่อลดภาระเครื่อง
+        });
+
+        // อัปเดตข้อความบนหน้าจอ
+        function updateScannedList() {
+            const resultElement = document.getElementById('scanned_result');
+            if (scannedStudents.size > 0) {
+                resultElement.textContent = Array.from(scannedStudents).join(', ');
+            }
+        }
+
+       // 🌟 ฟังก์ชันส่งข้อมูลไปเซฟที่หลังบ้าน
+        async function saveAttendance() {
+            const courseId = document.getElementById('course_id').value.trim();
+            const dateStr = document.getElementById('attendance_date').value;
+            const periodCount = parseInt(document.getElementById('period_count').value); 
+
+            if (!courseId) return Swal.fire('แจ้งเตือน', 'กรุณาระบุรหัสวิชาก่อนบันทึก', 'warning');
+            if (scannedStudents.size === 0) return Swal.fire('แจ้งเตือน', 'ยังไม่มีนักเรียนสแกนผ่านเลยครับ', 'warning');
+
+            // 🌟 แก้ไขจุดนี้: แปลงตะกร้าข้อมูลให้อยู่ในรูปแบบ List ตามที่ main.py ต้องการ
+            let studentsData = [];
+            scannedStudents.forEach(studentId => {
+                studentsData.push({ 
+                    student_id: parseInt(studentId), 
+                    status: "present" 
+                });
+            });
+
+            Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/attendance`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // 🌟 ดึง Token ล็อคอิน ถ้าเพิ่งเปิดหน้าเว็บมาเทสตรงๆ ให้เปลี่ยนเป็น 'Bearer teacher-secret-token-999' ได้เลยครับ
+                        'Authorization': 'Bearer ' + (localStorage.getItem('token') || 'teacher-secret-token-999')
+                    },
+                    body: JSON.stringify({
+                        course_id: courseId,
+                        date: dateStr,
+                        periods: periodCount,
+                        students: studentsData // 🌟 เปลี่ยนชื่อตัวแปรให้ตรงกับ BulkAttendance
+                    })
+                });
+
+                if (response.ok) {
+                    Swal.fire('สำเร็จ!', `บันทึกการเข้าเรียน ${periodCount} คาบ เรียบร้อยแล้ว`, 'success');
+                    scannedStudents.clear(); 
+                    updateScannedList();
+                } else {
+                    const errData = await response.json();
+                    Swal.fire('ผิดพลาด', errData.detail || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+                }
+            } catch (error) {
+                Swal.fire('เชื่อมต่อล้มเหลว', 'โปรดตรวจสอบอินเทอร์เน็ตหรือสถานะเซิร์ฟเวอร์', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

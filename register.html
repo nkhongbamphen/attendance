@@ -45,6 +45,14 @@
                 <div class="mb-2">
                     <input type="text" id="stu_name" class="form-control" placeholder="ชื่อ-นามสกุล (เช่น ด.ช.สมชาย ใจดี)">
                 </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <input type="text" id="stu_grade" class="form-control" placeholder="ชั้น (เช่น ม.4)">
+                    </div>
+                    <div class="col-6">
+                        <input type="text" id="stu_room" class="form-control" placeholder="ห้อง (เช่น 1)">
+                    </div>
+                </div>
                 <button onclick="addStudent()" class="btn btn-outline-success w-100 fw-bold">+ บันทึกนักเรียน</button>
 
                 <hr class="my-3">
@@ -103,38 +111,54 @@
 
         const API_BASE_URL = "https://attendance-iudd.onrender.com/api";
 
-        // 📌 1. ฟังก์ชันส่งข้อมูลนักเรียน (เวอร์ชันเปลี่ยนร่างป๊อปอัป)
+        // 📌 1. ฟังก์ชันส่งข้อมูลนักเรียน (แก้ไขให้รับ ชั้น และ ห้อง)
         async function addStudent() {
             const id = document.getElementById('stu_id').value;
             const name = document.getElementById('stu_name').value;
-            if(!id || !name) return Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลนักเรียนให้ครบ', 'warning');
+            // 🌟 ดึงข้อมูลชั้นและห้อง (ถ้าไม่ได้กรอก จะให้ค่าเริ่มต้นเป็น "-")
+            const grade = document.getElementById('stu_grade').value.trim() || "-";
+            const room = document.getElementById('stu_room').value.trim() || "-";
+
+            if(!id || !name) return Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัสและชื่อนักเรียนให้ครบ', 'warning');
 
             Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
-                const res = await fetch(`${API_BASE_URL}/students`, {
+                const res = await fetch(`${API_BASE_URL}/students/bulk`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('token') // 🌟 แนบบัตรพนักงาน
+                        'Authorization': 'Bearer ' + localStorage.getItem('token') 
                     },
-                    body: JSON.stringify({ student_id: parseInt(id), name: name })
+                    // 🌟 ส่งค่า grade และ room ที่ได้จากหน้าเว็บไปพร้อมกับข้อมูลนักเรียน
+                    body: JSON.stringify({ 
+                        students: [
+                            { 
+                                student_id: parseInt(id), 
+                                name: name, 
+                                grade: grade, 
+                                room: room 
+                            }
+                        ] 
+                    })
                 });
                 
                 if(res.ok) {
-                    Swal.fire('สำเร็จ', `บันทึกนักเรียน ${name} เรียบร้อย`, 'success');
+                    Swal.fire('สำเร็จ', `บันทึกนักเรียน ${name} (ชั้น ${grade}/${room}) เรียบร้อย`, 'success');
+                    // เคลียร์ช่องกรอกข้อมูลให้ว่างเพื่อรอคนต่อไป
                     document.getElementById('stu_id').value = '';
                     document.getElementById('stu_name').value = '';
+                    document.getElementById('stu_grade').value = '';
+                    document.getElementById('stu_room').value = '';
                 } else if (res.status === 401) {
                     handleUnauthorized();
                 } else {
-                    Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้ (รหัสอาจซ้ำในระบบ)', 'error');
+                    Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกได้', 'error');
                 }
             } catch (err) { 
                 Swal.fire('ข้อผิดพลาด', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error'); 
             }
         }
-
         // 📌 2. ฟังก์ชันส่งข้อมูลวิชา
         async function addCourse() {
             const id = document.getElementById('course_id').value;

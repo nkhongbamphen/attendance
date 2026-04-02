@@ -37,6 +37,12 @@
             <div class="col-6"><div class="summary-box bg-info shadow-sm"><h2 id="count_leave">0</h2><small>ลา</small></div></div>
         </div>
 
+        <div class="text-start mb-4">
+            <h6 class="fw-bold text-secondary mb-2">📋 รายชื่อผู้ที่ ขาด / ลา / สาย</h6>
+            <ul id="abnormal_list" class="list-group shadow-sm" style="border-radius: 10px; overflow: hidden;">
+                </ul>
+        </div>
+        
         <button onclick="submitToDatabase()" class="btn btn-primary w-100 py-3 rounded-pill shadow fs-5 fw-bold mb-3">
             💾 ยืนยันบันทึกเข้าฐานข้อมูล
         </button>
@@ -54,12 +60,12 @@
         const API_BASE_URL = "https://attendance-iudd.onrender.com/api";
         let sessionData = null;
 
-        // 📌 1. ดึงข้อมูลที่ฝากไว้ตอนมาจากหน้า index.html
+        // 📌 1. ดึงข้อมูลที่ฝากไว้ตอนมาจากหน้า index.html (หรือ attendance.html)
         window.onload = function() {
             const dataStr = localStorage.getItem("attendanceSession");
             if (!dataStr) {
                 Swal.fire('ไม่พบข้อมูล', 'กรุณาทำการเช็คชื่อจากหน้าแรกก่อนครับ', 'error').then(() => {
-                    window.location.href = "index.html";
+                    window.location.href = "attendance.html";
                 });
                 return;
             }
@@ -69,17 +75,54 @@
 
             // นับยอดสรุป
             let present = 0, absent = 0, late = 0, leave = 0;
+            
+            // 🌟 เตรียมตัวแปรเก็บ HTML สำหรับรายชื่อคนที่ไม่มาปกติ
+            let listHTML = '';
+            
+            // 🌟 ตัวแปรช่วยแปลภาษาและกำหนดสีป้ายกำกับ
+            const statusMap = {
+                'absent': { label: 'ขาดเรียน', color: 'danger' },
+                'late': { label: 'มาสาย', color: 'warning text-dark' },
+                'leave': { label: 'ลา', color: 'info text-dark' }
+            };
+
             sessionData.students.forEach(s => {
-                if (s.status === 'present') present++;
-                else if (s.status === 'absent') absent++;
-                else if (s.status === 'late') late++;
-                else if (s.status === 'leave') leave++;
+                if (s.status === 'present') {
+                    present++;
+                } else {
+                    // ถ้าไม่ได้มาเรียนปกติ ให้นับยอดตามประเภท
+                    if (s.status === 'absent') absent++;
+                    else if (s.status === 'late') late++;
+                    else if (s.status === 'leave') leave++;
+                    
+                    // 🌟 สร้าง HTML รายชื่อแทรกเข้าไป (อัปเดตให้แสดงชื่อและจัด Layout ให้สวยงาม)
+                    const statusInfo = statusMap[s.status];
+                    listHTML += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light py-2">
+                            <div class="text-truncate" style="max-width: 75%;">
+                                <span class="text-muted" style="font-size: 0.8rem;">รหัส: ${s.student_id}</span><br>
+                                <strong class="text-dark">${s.name}</strong>
+                            </div>
+                            <span class="badge bg-${statusInfo.color} rounded-pill px-3 py-2 shadow-sm">${statusInfo.label}</span>
+                        </li>
+                    `;
+                }
             });
 
+            // อัปเดตตัวเลขในกล่อง 4 สี
             document.getElementById('count_present').innerText = present;
             document.getElementById('count_absent').innerText = absent;
             document.getElementById('count_late').innerText = late;
             document.getElementById('count_leave').innerText = leave;
+
+            // 🌟 อัปเดตรายชื่อลงในหน้าเว็บ
+            const listContainer = document.getElementById('abnormal_list');
+            if (listHTML === '') {
+                // ถ้ามาครบทุกคน จะโชว์ข้อความน่ารักๆ
+                listContainer.innerHTML = '<li class="list-group-item text-center text-success fw-bold py-3">🎉 มาเรียนครบทุกคนครับ!</li>';
+            } else {
+                listContainer.innerHTML = listHTML;
+            }
         };
 
         // 📌 2. ส่งข้อมูลเข้า Database จริงๆ
@@ -118,7 +161,7 @@
                         confirmButtonText: 'กลับหน้าแรก'
                     }).then(() => {
                         localStorage.removeItem("attendanceSession"); // ล้างความจำ
-                        window.location.href = "index.html"; // เด้งกลับหน้าแรก
+                        window.location.href = "attendance.html"; // เด้งกลับหน้าแรก
                     });
                 } else if (res.status === 401) {
                     // 🌟 ถ้าบัตรหมดอายุ หรือปลอมแปลงบัตร
@@ -135,7 +178,7 @@
         }
 
         function goBack() {
-            window.location.href = "index.html";
+            window.location.href = "attendance.html";
         }
     </script>
 </body>

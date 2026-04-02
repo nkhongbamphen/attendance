@@ -148,16 +148,49 @@ def get_students(course_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/attendance", dependencies=[Depends(verify_auth)])
 def save_attendance(payload: BulkAttendance, db: Session = Depends(get_db)):
+    # 🌟 1. ตรวจสอบว่า "รหัสวิชา" นี้ถูกสร้างไว้ในระบบหรือยัง?
+    course = db.query(CourseDB).filter(CourseDB.course_id == payload.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail=f"ไม่พบรายวิชา {payload.course_id} ในระบบ กรุณาเพิ่มวิชาก่อนครับ")
+
+    # 🌟 2. ดึงรายชื่อเด็กที่ "ลงทะเบียนเรียน" ในวิชานี้ขึ้นมาตรวจสอบ
+    enrollments = db.query(EnrollmentDB).filter(EnrollmentDB.course_id == payload.course_id).all()
+    enrolled_student_ids = [e.student_id for e in enrollments]
+
+    if not enrolled_student_ids:
+        raise HTTPException(status_code=400, detail="วิชานี้ยังไม่มีนักเรียนลงทะเบียนเรียนเลยครับ")
+
     count = 0
     for item in payload.students:
-        existing = db.query(AttendanceDB).filter(AttendanceDB.student_id == item.student_id, AttendanceDB.subject_id == payload.course_id, AttendanceDB.date == payload.date).first()
+        # 🌟 3. ถ้าเด็กที่สแกนหน้าติด "ไม่ได้ลงทะเบียนเรียน" วิชานี้ ให้ข้ามไปเลย (ป้องกันคนเดินผ่านกล้อง)
+        if item.student_id not in enrolled_student_ids:
+            continue 
+
+        existing = db.query(AttendanceDB).filter(
+            AttendanceDB.student_id == item.student_id, 
+            AttendanceDB.subject_id == payload.course_id, 
+            AttendanceDB.date == payload.date
+        ).first()
+        
         if existing:
-            existing.status = item.status; existing.periods = payload.periods 
+            existing.status = item.status
+            existing.periods = payload.periods 
         else:
-            db.add(AttendanceDB(student_id=item.student_id, subject_id=payload.course_id, date=payload.date, status=item.status, periods=payload.periods))
+            db.add(AttendanceDB(
+                student_id=item.student_id, 
+                subject_id=payload.course_id, 
+                date=payload.date, 
+                status=item.status, 
+                periods=payload.periods
+            ))
         count += 1
+    
+    # 🌟 4. เช็คว่าหลังจากกรองคนที่ไม่ได้ลงเรียนออกไปแล้ว ยังมีคนให้บันทึกอยู่ไหม
+    if count == 0:
+        raise HTTPException(status_code=400, detail="ไม่มีนักเรียนที่ลงทะเบียนเรียนในรายชื่อที่สแกนมาเลยครับ")
+
     db.commit()
-    return {"message": f"บันทึกข้อมูลสำเร็จ {count} รายการ"}
+    return {"message": f"บันทึกข้อมูลสำเร็จ {count} รายการ (กรองคนที่ไม่ได้ลงทะเบียนออกแล้ว)"}
 
 @app.get("/api/reports/{course_id}", dependencies=[Depends(verify_auth)])
 def get_attendance_report(course_id: str, db: Session = Depends(get_db)):
@@ -198,3 +231,29 @@ def get_attendance_report(course_id: str, db: Session = Depends(get_db)):
         "dates": all_dates,
         "summary": report_summary
     }
+
+# 🌟 เพิ่ม API ช่องทางใหม่: สำหรับลงทะเบียนนักเรียนรายบุคคล
+@app.post("/api/enrollments", dependencies=[Depends(verify_auth)])
+def enroll_single_student(payload: EnrollmentCreate, db: Session = Depends(get_db)):
+    # 1. เช็คว่าวิชานี้มีอยู่จริงไหม
+    if not db.query(CourseDB).filter(CourseDB.course_id == payload.course_id).first():
+        raise HTTPException(status_code=404, detail="ไม่พบรหัสวิชานี้ในระบบ")
+        
+    # 2. เช็คว่ามีรหัสเด็กคนนี้ในระบบหรือยัง
+    if not db.query(StudentDB).filter(StudentDB.student_id == payload.student_id).first():
+        raise HTTPException(status_code=404, detail="ไม่พบรหัสนักเรียนนี้ในระบบ กรุณาเพิ่มชื่อนักเรียนก่อนครับ")
+        
+    # 3. เช็คว่าเด็กลงทะเบียนวิชานี้ซ้ำหรือเปล่า
+    existing = db.query(EnrollmentDB).filter(
+        EnrollmentDB.student_id == payload.student_id, 
+        EnrollmentDB.course_id == payload.course_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="นักเรียนคนนี้ลงทะเบียนวิชานี้ไปเรียบร้อยแล้วครับ")
+        
+    # 4. บันทึกลงฐานข้อมูล
+    db.add(EnrollmentDB(student_id=payload.student_id, course_id=payload.course_id))
+    db.commit()
+    
+    return {"message": f"นำรหัสนักเรียน {payload.student_id} เข้าวิชา {payload.course_id} สำเร็จ!"}
